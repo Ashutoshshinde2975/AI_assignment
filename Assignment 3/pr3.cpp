@@ -1,201 +1,108 @@
-//Perform parsing of family tree using knowledge-base
-#include <iostream>
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <unordered_set>
-#include <regex>
-#include <algorithm>
+#include <bits/stdc++.h>
+using namespace std;
 
-struct Person {
-    std::string name;
-    std::string gender;  // "male" or "female" (unknown allowed)
-    std::vector<Person*> parents;
-    std::vector<Person*> children;
-
-    Person(const std::string& n, const std::string& g) : name(n), gender(g) {}
-};
-
-class KnowledgeBaseFamilyTree {
-private:
-    std::unordered_map<std::string, Person*> people;
+class FamilyTree {
+    // Knowledge base
+    vector<pair<string,string>> parents;   // (parent, child)
+    unordered_set<string> male;
+    unordered_set<string> female;
 
 public:
-    ~KnowledgeBaseFamilyTree() {
-        for (auto& pair : people) {
-            delete pair.second;
-        }
+    // Add facts
+    void addParent(string p, string c) {
+        parents.push_back({p,c});
+    }
+    void addMale(string name) { male.insert(name); }
+    void addFemale(string name) { female.insert(name); }
+
+    // Derived rules
+    bool isParent(string p, string c) {
+        for (auto &pc : parents)
+            if (pc.first == p && pc.second == c) return true;
+        return false;
     }
 
-    void addPerson(const std::string& name, const std::string& gender) {
-        if (people.find(name) == people.end()) {
-            people[name] = new Person(name, gender);
-        }   
+    bool isFather(string p, string c) {
+        return isParent(p,c) && male.count(p);
     }
 
-    void addFact(const std::string& relation, const std::string& parent, const std::string& child) {
-        std::string gender = (relation == "father") ? "male" : "female";
-        addPerson(parent, gender);
-        addPerson(child, "unknown");  // gender may be unknown initially
-
-        Person* p = people[parent];
-        Person* c = people[child];
-        p->children.push_back(c);
-        c->parents.push_back(p);
+    bool isMother(string p, string c) {
+        return isParent(p,c) && female.count(p);
     }
 
-    std::vector<std::string> getParents(const std::string& name) {
-        std::vector<std::string> result;
-        if (people.find(name) != people.end()) {
-            for (auto& p : people[name]->parents) {
-                result.push_back(p->name);
-            }
-        }
-        return result;
+    vector<string> children(string p) {
+        vector<string> res;
+        for (auto &pc : parents)
+            if (pc.first == p) res.push_back(pc.second);
+        return res;
     }
 
-    std::vector<std::string> getFather(const std::string& name) {
-        std::vector<std::string> fathers;
-        if (people.find(name) != people.end()) {
-            for (auto& p : people[name]->parents) {
-                if (p->gender == "male") {
-                    fathers.push_back(p->name);
+    vector<string> siblings(string x) {
+        vector<string> sibs;
+        for (auto &p1 : parents) {
+            if (p1.second == x) {
+                for (auto &p2 : parents) {
+                    if (p1.first == p2.first && p2.second != x)
+                        sibs.push_back(p2.second);
                 }
             }
         }
-        return fathers;
+        sort(sibs.begin(), sibs.end());
+        sibs.erase(unique(sibs.begin(), sibs.end()), sibs.end());
+        return sibs;
     }
 
-    std::vector<std::string> getMother(const std::string& name) {
-        std::vector<std::string> mothers;
-        if (people.find(name) != people.end()) {
-            for (auto& p : people[name]->parents) {
-                if (p->gender == "female") {
-                    mothers.push_back(p->name);
+    vector<string> grandparents(string x) {
+        vector<string> gp;
+        for (auto &pc : parents) {
+            if (pc.second == x) {
+                string parent = pc.first;
+                for (auto &pg : parents) {
+                    if (pg.second == parent) gp.push_back(pg.first);
                 }
             }
         }
-        return mothers;
-    }
-
-    std::vector<std::string> getGrandmother(const std::string& name) {
-        std::unordered_set<std::string> grandmothers;
-        auto parents = getParents(name);
-        for (const auto& parent : parents) {
-            auto gps = getParents(parent);
-            for (const auto& gp : gps) {
-                if (people[gp]->gender == "female") {
-                    grandmothers.insert(gp);
-                }
-            }
-        }
-        return {grandmothers.begin(), grandmothers.end()};
-    }
-
-    std::vector<std::string> getSiblings(const std::string& name) {
-        std::unordered_set<std::string> siblings;
-        if (people.find(name) != people.end()) {
-            for (auto& parent : people[name]->parents) {
-                for (auto& child : parent->children) {
-                    if (child->name != name) {
-                        siblings.insert(child->name);
-                    }
-                }
-            }
-        }
-        return {siblings.begin(), siblings.end()};
-    }
-
-    void displayResults(const std::string& relationship, const std::string& person,
-                        const std::vector<std::string>& results) {
-        std::cout << "\n" << relationship << " of " << person << "\n";
-        if (results.empty()) {
-            std::cout << "| No " << relationship << " found                          |\n";
-        } else {
-            for (const auto& res : results) {
-                std::cout << "| " << res 
-                          << std::string(50 - res.length(), ' ') << "|\n";
-            }
-        }
-    }
-
-    // Parse facts like "father(John, Bob)." or "mother(Mary, Bob)."
-    void parseFact(const std::string& fact) {
-        std::regex pattern(R"((father|mother)\((\w+),\s*(\w+)\)\.)");
-        std::smatch match;
-        if (std::regex_match(fact, match, pattern)) {
-            std::string relation = match[1];
-            std::string parent = match[2];
-            std::string child = match[3];
-            addFact(relation, parent, child);
-        }
+        sort(gp.begin(), gp.end());
+        gp.erase(unique(gp.begin(), gp.end()), gp.end());
+        return gp;
     }
 };
 
 int main() {
-    KnowledgeBaseFamilyTree tree;
+    FamilyTree ft;
 
-    // Knowledge base facts
-    std::vector<std::string> facts = {
-        "father(John, Bob).",
-        "mother(Mary, Bob).",
-        "father(Bob, Kate).",
-        "mother(Alice, Kate).",
-        "father(Bob, Frank).",
-        "mother(Alice, Frank).",
-        "father(John, Anna).",
-        "mother(Mary, Anna)."
-    };
+    // Facts
+    ft.addParent("John", "Alice");
+    ft.addParent("John", "Bob");
+    ft.addParent("Mary", "Alice");
+    ft.addParent("Mary", "Bob");
+    ft.addParent("Alice", "Charlie");
+    ft.addParent("Alice", "Diana");
+    ft.addParent("Peter", "Charlie");
+    ft.addParent("Peter", "Diana");
 
-    for (const auto& f : facts) {
-        tree.parseFact(f);
-    }
+    ft.addMale("John");
+    ft.addMale("Bob");
+    ft.addMale("Peter");
+    ft.addMale("Charlie");
+    ft.addFemale("Mary");
+    ft.addFemale("Alice");
+    ft.addFemale("Diana");
 
-    int choice;
-    std::string person;
+    // Queries
+    cout << "Father of Alice: ";
+    if (ft.isFather("John","Alice")) cout << "John\n";
 
-    while (true) {
-        std::cout << "\n====== Family Tree Knowledge-Base Query ======\n";
-        std::cout << "1. Find Father\n";
-        std::cout << "2. Find Mother\n";
-        std::cout << "3. Find Grandmother\n";
-        std::cout << "4. Find Siblings\n";
-        std::cout << "5. Exit\n";
-        std::cout << "Enter choice: ";
-        std::cin >> choice;
-        std::cin.ignore();
+    cout << "Mother of Bob: ";
+    if (ft.isMother("Mary","Bob")) cout << "Mary\n";
 
-        if (choice == 5) {
-            std::cout << "Exiting program...\n";
-            break;
-        }
+    cout << "Siblings of Charlie: ";
+    for (auto &s : ft.siblings("Charlie")) cout << s << " ";
+    cout << "\n";
 
-        std::cout << "Enter person's name: ";
-        std::getline(std::cin, person);
-
-        std::transform(person.begin(), person.end(), person.begin(), ::tolower);
-        if (!person.empty()) person[0] = std::toupper(person[0]);
-
-        if (choice == 1) {
-            auto results = tree.getFather(person);
-            tree.displayResults("Father", person, results);
-        } 
-        else if (choice == 2) {
-            auto results = tree.getMother(person);
-            tree.displayResults("Mother", person, results);
-        } 
-        else if (choice == 3) {
-            auto results = tree.getGrandmother(person);
-            tree.displayResults("Grandmother", person, results);
-        }
-        else if (choice == 4) {
-            auto results = tree.getSiblings(person);
-            tree.displayResults("Siblings", person, results);
-        } 
-        else {
-            std::cout << "Invalid choice!\n";
-        }
-    }
+    cout << "Grandparents of Diana: ";
+    for (auto &g : ft.grandparents("Diana")) cout << g << " ";
+    cout << "\n";
 
     return 0;
 }
